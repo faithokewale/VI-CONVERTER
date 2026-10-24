@@ -1,35 +1,3 @@
-#!/usr/bin/env python3
-"""
-converter.py — Academic document → clean Markdown converter
-
-Pipeline:
-    1. Script receives a file (by path, or via a file picker)
-    2. Extract raw text from the document
-    3. Clean and structure into Markdown
-    4. Save as a .md file locally
-
-Supported input types: PDF, DOCX, PPTX
-(lecture notes, past questions, handouts, assignments, slides)
-
-Output:
-    Converted .md files are saved into an "output" folder next to this
-    script (created automatically if it doesn't exist), unless -o is used
-    to point somewhere else.
-
-Output format (non-negotiable):
-
-    # COURSE CODE — Document Title
-
-    ## Section Heading
-    - Sub-topic one
-    - Sub-topic two
-
-Usage:
-    python converter.py                          # opens a file picker
-    python converter.py path/to/file.pdf
-    python converter.py path/to/file.docx -o somewhere_else
-    python converter.py path/to/file.pptx --course CSC401 --title "Networks Intro"
-"""
 
 import argparse
 import re
@@ -42,11 +10,6 @@ from docx import Document
 from pptx import Presentation
 
 
-# ---------------------------------------------------------------------------
-# Step 2a: Extraction — turn each file type into a flat list of
-#          {"text": str, "is_heading": bool, "is_bullet": bool} blocks,
-#          in reading order.
-# ---------------------------------------------------------------------------
 
 def extract_pdf(path):
     """
