@@ -49,5 +49,3 @@ python converter.py path/to/file.pptx --course CSC401 --title "Networks Intro"
 By default, every converted `.md` file is saved into an `output/` folder
 next to `converter.py` — created automatically the first time you run it —
 regardless of where the source file lives. Pass `-o` to save somewhere else.
-
-

@@ -1,3 +1,35 @@
+#!/usr/bin/env python3
+"""
+converter.py — Academic document → clean Markdown converter
+
+Pipeline:
+    1. Script receives a file (by path, or via a file picker)
+    2. Extract raw text from the document
+    3. Clean and structure into Markdown
+    4. Save as a .md file locally
+
+Supported input types: PDF, DOCX, PPTX
+(lecture notes, past questions, handouts, assignments, slides)
+
+Output:
+    Converted .md files are saved into an "output" folder next to this
+    script (created automatically if it doesn't exist), unless -o is used
+    to point somewhere else.
+
+Output format (non-negotiable):
+
+    # COURSE CODE — Document Title
+
+    ## Section Heading
+    - Sub-topic one
+    - Sub-topic two
+
+Usage:
+    python converter.py                          # opens a file picker
+    python converter.py path/to/file.pdf
+    python converter.py path/to/file.docx -o somewhere_else
+    python converter.py path/to/file.pptx --course CSC401 --title "Networks Intro"
+"""
 
 import argparse
 import re
@@ -10,14 +42,27 @@ from docx import Document
 from pptx import Presentation
 
 
-
-#  Extraction
+# ---------------------------------------------------------------------------
+# Step 2a: Extraction — turn each file type into a flat list of
+#          {"text": str, "is_heading": bool, "is_bullet": bool} blocks,
+#          in reading order.
+# ---------------------------------------------------------------------------
 
 def extract_pdf(path):
+    """
+    Pull text out of a PDF line by line, using relative font size to guess
+    which lines are headings. This is heuristic — PDFs carry no semantic
+    structure — but it works well for lecture-note style documents where
+    headings are visibly larger/bolder than body text.
+    """
     raw_lines = []      # (text, size, page_no)
     with pdfplumber.open(path) as pdf:
         for page_no, page in enumerate(pdf.pages):
-            words = page.extract_words(extra_attrs=["size"])
+            # x_tolerance lowered from pdfplumber's default (3): some PDFs —
+            # notably LaTeX-generated academic papers — use tighter
+            # character spacing than the default assumes, which otherwise
+            # merges entire lines into a single run-on "word".
+            words = page.extract_words(extra_attrs=["size"], x_tolerance=2)
             if not words:
                 continue
             lines = {}
@@ -74,7 +119,7 @@ def extract_docx(path):
         is_bullet = "list" in style  # "List Bullet", "List Number", "List Paragraph", etc.
         blocks.append({"text": text, "is_heading": is_heading, "is_bullet": is_bullet})
 
-   
+    # Tables often hold problem sets / data in past questions and handouts.
     for table in doc.tables:
         for row in table.rows:
             cells = [c.text.strip() for c in row.cells if c.text.strip()]
@@ -111,12 +156,15 @@ def extract_pptx(path):
 
 EXTRACTORS = {".pdf": extract_pdf, ".docx": extract_docx, ".pptx": extract_pptx}
 
-#  converted .md file lands here 
+# Every converted .md file lands here by default, regardless of where the
+# input file lives or where the script is run from.
 DEFAULT_OUTPUT_DIR = Path(__file__).resolve().parent / "output"
 
 
+# ---------------------------------------------------------------------------
+# Step 2b: Cleaning
+# ---------------------------------------------------------------------------
 
-# Cleaning
 def clean_text(text):
     """Collapse whitespace and fix common PDF hyphenation breaks."""
     text = re.sub(r"(\w)-\s*$", r"\1", text)      # trailing hyphen from line wrap
@@ -134,10 +182,12 @@ def clean_blocks(blocks):
     return cleaned
 
 
-
-# Structuring into the required Markdown format
+# ---------------------------------------------------------------------------
+# Step 3: Structuring into the required Markdown format
+# ---------------------------------------------------------------------------
 
 COURSE_CODE_RE = re.compile(r"\b([A-Z]{2,5})\s?-?\s?(\d{3})\b")
+
 
 def guess_course_code(blocks, filename):
     """Look for a course code (e.g. CSC401) in the filename, then the body."""
@@ -159,6 +209,21 @@ def guess_title(blocks, filename):
 
 
 def structure_markdown(blocks, course_code, title):
+    """
+    Group blocks into (heading, content) sections and render the required
+    Markdown structure:
+
+        # COURSE CODE — Title
+
+        ## Section Heading
+        - Sub-topic one
+        - Sub-topic two
+
+    List-like content (bullets, slide body text, table rows) is rendered as
+    a Markdown list, mirroring how the source document presented it. Plain
+    prose content is kept as its own paragraph line instead of being merged
+    with everything else.
+    """
     sections = []
     current_heading = None
     current_content = []
@@ -188,9 +253,9 @@ def structure_markdown(blocks, course_code, title):
     return "\n".join(lines).rstrip() + "\n"
 
 
-
-#  Save + CLI entry point
-
+# ---------------------------------------------------------------------------
+# Step 4: Save + CLI entry point
+# ---------------------------------------------------------------------------
 
 def convert(input_path, output_dir=None, course=None, title=None):
     input_path = Path(input_path)
@@ -215,6 +280,7 @@ def convert(input_path, output_dir=None, course=None, title=None):
 
 
 def pick_file_dialog():
+    """Open the OS's native 'Open File' dialog and return the chosen path, or None if cancelled."""
     try:
         import tkinter as tk
         from tkinter import filedialog
@@ -228,8 +294,8 @@ def pick_file_dialog():
         sys.exit(1)
 
     root = tk.Tk()
-    root.withdraw()          # to hide the empty main window, 
-    root.attributes("-topmost", True)  # brings the dialog to the front
+    root.withdraw()          # hide the empty main window, we only want the dialog
+    root.attributes("-topmost", True)  # bring the dialog to the front
     path = filedialog.askopenfilename(
         title="Select a document to convert",
         filetypes=[
